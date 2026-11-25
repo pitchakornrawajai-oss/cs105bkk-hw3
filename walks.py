@@ -2,35 +2,59 @@
 Session 7 (reading a CSV file, cleaning data) and Session 9 (a generator and a decorator)."""
 
 import csv
-from collections.abc import Callable, Iterable, Iterator
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Callable, Iterable, Iterator, TypeVar
+
+T = TypeVar("T")
 
 
 @dataclass
 class Walk:
-    """Provided: one walk from the log, cleaned. `steps` is a whole number, 0 or more."""
-
     date: str
     steps: int
     place: str
 
 
 def parse_walk(row: dict[str, str]) -> Walk:
-    """Turn one row of the CSV file into a Walk, or raise ValueError if the row is bad."""
-    raise NotImplementedError("core: clean one row into a Walk, or raise ValueError for a bad row")
+    date = (row.get("date") or "").strip()
+    if not date:
+        raise ValueError("date is missing or empty")
+
+    raw_steps = row.get("steps")
+    if raw_steps is None:
+        raise ValueError("steps is missing")
+
+    raw_steps_str = str(raw_steps).strip()
+    if not raw_steps_str:
+        raise ValueError("steps is empty")
+
+    steps = int(raw_steps_str)
+    if steps < 0:
+        raise ValueError(f"steps is below 0: {steps}")
+
+    place = (row.get("place") or "").strip()
+    return Walk(date=date, steps=steps, place=place)
 
 
-def none_on_error(func: Callable) -> Callable:
-    """A decorator: the wrapped function returns None instead of raising ValueError."""
-    raise NotImplementedError("core: wrap func so that a ValueError becomes None")
+def none_on_error(func: Callable[..., T]) -> Callable[..., T | None]:
+    def wrapper(*args, **kwargs) -> T | None:
+        try:
+            return func(*args, **kwargs)
+        except ValueError:
+            return None
+
+    return wrapper
 
 
-def read_rows(path: Path) -> Iterator[dict[str, str]]:
-    """Yield the rows of a CSV file one at a time, each as a dict of text."""
-    raise NotImplementedError("core: open the CSV file and yield its rows one at a time")
+def read_rows(path: Path | str) -> Iterator[dict[str, str]]:
+    with open(path, encoding="utf-8", newline="") as file:
+        yield from csv.DictReader(file)
 
 
 def good_walks(rows: Iterable[dict[str, str]]) -> Iterator[Walk]:
-    """Yield a Walk for every good row, one at a time, and skip the bad rows."""
-    raise NotImplementedError("core: yield a Walk for each good row and skip the bad ones")
+    safe_parse = none_on_error(parse_walk)
+    for row in rows:
+        walk = safe_parse(row)
+        if walk is not None:
+            yield walk

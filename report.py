@@ -1,39 +1,71 @@
 """HW3 · report.py: add up the steps and save a report as JSON. Practises Session 7 (writing
 and reading JSON) and Session 9 (a context manager)."""
 
-import json
-from collections.abc import Iterable, Iterator
 from contextlib import contextmanager
+import json
 from pathlib import Path
-from typing import TextIO
+from typing import Iterable, Iterator
 
 from walks import Walk, good_walks, read_rows
 
 
 def steps_per_day(walks: Iterable[Walk]) -> dict[str, int]:
     """Total steps for each date, with the dates in order, earliest first."""
-    raise NotImplementedError("core: add up the steps for each date, earliest date first")
+    totals: dict[str, int] = {}
+    for walk in walks:
+        totals[walk.date] = totals.get(walk.date, 0) + walk.steps
+
+    return {day: totals[day] for day in sorted(totals)}
 
 
 def best_day(totals: dict[str, int]) -> str:
     """The date with the most steps. On a tie, the earliest of those dates."""
-    raise NotImplementedError("core: the date with the most steps, the earliest on a tie")
+    if not totals:
+        raise ValueError("totals is empty")
+
+    max_steps = max(totals.values())
+    return min(day for day, total in totals.items() if total == max_steps)
 
 
 @contextmanager
-def saved_safely(path: Path) -> Iterator[TextIO]:
+def saved_safely(path: Path | str) -> Iterator:
     """Write to a new file, and put it in place of `path` only if the with block ends without an error."""
-    raise NotImplementedError("core: write to a .tmp file, then replace path only if nothing failed")
+    target = Path(path)
+    tmp_path = target.with_name(target.name + ".tmp")
+    try:
+        with open(tmp_path, "w", encoding="utf-8") as file:
+            yield file
+        tmp_path.replace(target)
+    except Exception:
+        tmp_path.unlink(missing_ok=True)
+        raise
 
 
-def write_report(path: Path, walks: Iterable[Walk]) -> dict:
+def write_report(path: Path | str, walks: Iterable[Walk]) -> dict:
     """Save the week's report to a JSON file, and return it as a dict."""
-    raise NotImplementedError("core: build the report dict, save it with saved_safely, return it")
+    days = steps_per_day(walks)
+    best = best_day(days)
+    total_steps = sum(days.values())
+
+    report = {
+        "total_steps": total_steps,
+        "best_day": best,
+        "days": days,
+    }
+
+    with saved_safely(path) as file:
+        json.dump(report, file, indent=2)
+
+    return report
 
 
-def load_report(path: Path) -> dict | None:
+def load_report(path: Path | str) -> dict | None:
     """The report saved last time, or None if there is no file or it is not valid JSON."""
-    raise NotImplementedError("core: load the saved report, or None if it is missing or broken")
+    try:
+        with open(path, encoding="utf-8") as file:
+            return json.load(file)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return None
 
 
 if __name__ == "__main__":
